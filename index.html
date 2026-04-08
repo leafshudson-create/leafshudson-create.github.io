@@ -3,12 +3,8 @@ import { useState, useEffect } from "react";
 
 export default function Home() {
   const [form, setForm] = useState({
-    url: "",
+    raw: "",
     price: "",
-    mileage: "",
-    year: "",
-    make: "",
-    model: "",
     damage: "",
     comp1: "",
     comp2: "",
@@ -17,42 +13,42 @@ export default function Home() {
 
   const [result, setResult] = useState(null);
   const [savedDeals, setSavedDeals] = useState([]);
-  const [topDeals, setTopDeals] = useState([]);
+  const [feed, setFeed] = useState([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("deals");
     if (saved) setSavedDeals(JSON.parse(saved));
 
-    // Fake “top deals” (replace later with real data)
-    setTopDeals([
-      { name: "Honda Civic 2018", score: 82 },
-      { name: "Ford F150 2016", score: 78 },
-      { name: "Toyota Corolla 2020", score: 85 },
-    ]);
+    generateFeed();
   }, []);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // 🔍 Extract numbers from pasted listing text
-  const parseURL = () => {
-    let text = form.url;
+  // 🔍 SMART PARSER
+  const parseText = () => {
+    let text = form.raw.toLowerCase();
 
-    if (!text) return;
+    const price = text.match(/\$?(\d{3,6})/);
+    const mileage = text.match(/(\d{2,6})\s?km/);
+    const year = text.match(/(20\d{2})/);
 
-    const priceMatch = text.match(/\$?(\d{3,6})/);
-    const yearMatch = text.match(/(20\d{2})/);
+    let damage = "";
+    if (text.includes("frame")) damage = "frame";
+    else if (text.includes("engine")) damage = "engine";
+    else if (text.includes("bumper")) damage = "bumper";
 
     setForm((f) => ({
       ...f,
-      price: priceMatch ? priceMatch[1] : f.price,
-      year: yearMatch ? yearMatch[1] : f.year,
+      price: price ? price[1] : f.price,
+      damage: damage || f.damage,
     }));
 
-    alert("Parsed some data. Verify manually.");
+    alert("Parsed what I could. Check accuracy.");
   };
 
+  // 🧠 ANALYSIS
   const analyzeDeal = () => {
     const price = parseFloat(form.price);
     const comps = [
@@ -62,33 +58,30 @@ export default function Home() {
     ].filter(Boolean);
 
     if (!price || comps.length === 0) {
-      alert("Price + at least 1 comp required");
+      alert("Need price + at least 1 comp");
       return;
     }
 
-    // 📊 Average resale value
-    const resale =
-      comps.reduce((a, b) => a + b, 0) / comps.length;
+    const resale = comps.reduce((a, b) => a + b, 0) / comps.length;
 
-    let repairCost = 2000;
+    let repair = 2000;
     let risk = 20;
-    let dmg = form.damage.toLowerCase();
 
-    if (dmg.includes("bumper")) {
-      repairCost = 800;
-      risk += 10;
-    } else if (dmg.includes("engine")) {
-      repairCost = 6000;
-      risk += 50;
-    } else if (dmg.includes("frame")) {
-      repairCost = 10000;
+    if (form.damage.includes("frame")) {
+      repair = 10000;
       risk += 70;
+    } else if (form.damage.includes("engine")) {
+      repair = 6000;
+      risk += 50;
+    } else if (form.damage.includes("bumper")) {
+      repair = 800;
+      risk += 10;
     }
 
-    const totalCost = price + repairCost + 1600;
-    const profit = resale - totalCost;
+    const total = price + repair + 1600;
+    const profit = resale - total;
 
-    const dealScore = Math.max(
+    const score = Math.max(
       0,
       Math.min(100, (profit / resale) * 100 - risk * 0.4)
     );
@@ -99,14 +92,15 @@ export default function Home() {
 
     setResult({
       resale: Math.round(resale),
-      totalCost,
+      total,
       profit: Math.round(profit),
       risk,
-      dealScore: Math.round(dealScore),
+      score: Math.round(score),
       verdict,
     });
   };
 
+  // 💾 SAVE
   const saveDeal = () => {
     if (!result) return;
     const updated = [...savedDeals, { ...form, ...result }];
@@ -114,71 +108,86 @@ export default function Home() {
     localStorage.setItem("deals", JSON.stringify(updated));
   };
 
-  const deleteDeal = (index) => {
-    const updated = savedDeals.filter((_, i) => i !== index);
+  const deleteDeal = (i) => {
+    const updated = savedDeals.filter((_, idx) => idx !== i);
     setSavedDeals(updated);
     localStorage.setItem("deals", JSON.stringify(updated));
   };
 
+  // 🔥 DEAL FEED (SIMULATED ENGINE)
+  const generateFeed = () => {
+    const fake = [];
+
+    for (let i = 0; i < 5; i++) {
+      const price = Math.floor(Math.random() * 5000 + 1000);
+      const resale = price + Math.floor(Math.random() * 6000);
+      const risk = Math.floor(Math.random() * 70);
+
+      const score = Math.max(
+        0,
+        Math.min(100, (resale - price) / resale * 100 - risk * 0.3)
+      );
+
+      fake.push({
+        name: ["Civic", "F150", "Corolla"][i % 3],
+        score: Math.round(score),
+        profit: resale - price,
+      });
+    }
+
+    setFeed(fake);
+  };
+
   return (
-    <main style={{ padding: 30, maxWidth: 700, margin: "auto", fontFamily: "sans-serif" }}>
-      <h1>🚗 Deal Intelligence Engine</h1>
+    <main style={{ padding: 20, maxWidth: 500, margin: "auto", fontFamily: "sans-serif" }}>
+      <h1>🚗 Deal Engine</h1>
 
       {/* INPUT */}
-      <div style={{ display: "grid", gap: 10 }}>
-        <input name="url" placeholder="Paste listing text or URL" onChange={handleChange} />
-        <button onClick={parseURL}>Auto-Fill</button>
+      <textarea
+        name="raw"
+        placeholder="Paste listing text..."
+        onChange={handleChange}
+        style={{ width: "100%", height: 80 }}
+      />
+      <button onClick={parseText}>Auto Parse</button>
 
-        <input name="price" placeholder="Purchase Price" onChange={handleChange} />
+      <input name="price" placeholder="Price" onChange={handleChange} />
+      <input name="damage" placeholder="Damage" onChange={handleChange} />
 
-        <h3>Market Comparisons (IMPORTANT)</h3>
-        <input name="comp1" placeholder="Comp 1 price" onChange={handleChange} />
-        <input name="comp2" placeholder="Comp 2 price" onChange={handleChange} />
-        <input name="comp3" placeholder="Comp 3 price" onChange={handleChange} />
+      <h3>Market Comps</h3>
+      <input name="comp1" placeholder="Comp 1" onChange={handleChange} />
+      <input name="comp2" placeholder="Comp 2" onChange={handleChange} />
+      <input name="comp3" placeholder="Comp 3" onChange={handleChange} />
 
-        <input name="damage" placeholder="Damage (engine, frame, etc)" onChange={handleChange} />
-
-        <button onClick={analyzeDeal} style={{ padding: 12 }}>
-          Analyze Deal
-        </button>
-      </div>
+      <button onClick={analyzeDeal}>Analyze</button>
 
       {/* RESULT */}
       {result && (
-        <div style={{ marginTop: 30 }}>
-          <h2>📊 Results</h2>
-          <p>Resale Avg: ${result.resale}</p>
-          <p>Total Cost: ${result.totalCost}</p>
-          <h2>💰 Profit: ${result.profit}</h2>
-          <p>⚠️ Risk: {result.risk}</p>
-          <p>🔥 Score: {result.dealScore}</p>
-          <h2>{result.verdict}</h2>
-          <button onClick={saveDeal}>Save Deal</button>
+        <div>
+          <h2>Profit: ${result.profit}</h2>
+          <p>Score: {result.score}</p>
+          <p>Risk: {result.risk}</p>
+          <h3>{result.verdict}</h3>
+          <button onClick={saveDeal}>Save</button>
         </div>
       )}
 
       {/* SAVED */}
-      {savedDeals.length > 0 && (
-        <div style={{ marginTop: 40 }}>
-          <h2>📁 Saved Deals</h2>
-          {savedDeals.map((d, i) => (
-            <div key={i} style={{ border: "1px solid #ccc", padding: 10, marginBottom: 10 }}>
-              <p>{d.make} {d.model}</p>
-              <p>Profit: ${d.profit}</p>
-              <p>Score: {d.dealScore}</p>
-              <button onClick={() => deleteDeal(i)}>Delete</button>
-            </div>
-          ))}
+      <h2>Saved</h2>
+      {savedDeals.map((d, i) => (
+        <div key={i}>
+          <p>${d.price} → ${d.profit}</p>
+          <button onClick={() => deleteDeal(i)}>X</button>
         </div>
-      )}
+      ))}
 
-      {/* TOP DEALS */}
-      <div style={{ marginTop: 40 }}>
-        <h2>🔥 Top Deals (Simulated)</h2>
-        {topDeals.map((d, i) => (
-          <p key={i}>{d.name} — Score: {d.score}</p>
-        ))}
-      </div>
+      {/* FEED */}
+      <h2>🔥 Deal Feed</h2>
+      {feed.map((d, i) => (
+        <p key={i}>
+          {d.name} | Score: {d.score} | Profit: ${d.profit}
+        </p>
+      ))}
     </main>
   );
 }
