@@ -1,0 +1,184 @@
+"use client";
+import { useState, useEffect } from "react";
+
+export default function Home() {
+  const [form, setForm] = useState({
+    url: "",
+    price: "",
+    mileage: "",
+    year: "",
+    make: "",
+    model: "",
+    damage: "",
+    comp1: "",
+    comp2: "",
+    comp3: "",
+  });
+
+  const [result, setResult] = useState(null);
+  const [savedDeals, setSavedDeals] = useState([]);
+  const [topDeals, setTopDeals] = useState([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("deals");
+    if (saved) setSavedDeals(JSON.parse(saved));
+
+    // Fake “top deals” (replace later with real data)
+    setTopDeals([
+      { name: "Honda Civic 2018", score: 82 },
+      { name: "Ford F150 2016", score: 78 },
+      { name: "Toyota Corolla 2020", score: 85 },
+    ]);
+  }, []);
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  // 🔍 Extract numbers from pasted listing text
+  const parseURL = () => {
+    let text = form.url;
+
+    if (!text) return;
+
+    const priceMatch = text.match(/\$?(\d{3,6})/);
+    const yearMatch = text.match(/(20\d{2})/);
+
+    setForm((f) => ({
+      ...f,
+      price: priceMatch ? priceMatch[1] : f.price,
+      year: yearMatch ? yearMatch[1] : f.year,
+    }));
+
+    alert("Parsed some data. Verify manually.");
+  };
+
+  const analyzeDeal = () => {
+    const price = parseFloat(form.price);
+    const comps = [
+      parseFloat(form.comp1),
+      parseFloat(form.comp2),
+      parseFloat(form.comp3),
+    ].filter(Boolean);
+
+    if (!price || comps.length === 0) {
+      alert("Price + at least 1 comp required");
+      return;
+    }
+
+    // 📊 Average resale value
+    const resale =
+      comps.reduce((a, b) => a + b, 0) / comps.length;
+
+    let repairCost = 2000;
+    let risk = 20;
+    let dmg = form.damage.toLowerCase();
+
+    if (dmg.includes("bumper")) {
+      repairCost = 800;
+      risk += 10;
+    } else if (dmg.includes("engine")) {
+      repairCost = 6000;
+      risk += 50;
+    } else if (dmg.includes("frame")) {
+      repairCost = 10000;
+      risk += 70;
+    }
+
+    const totalCost = price + repairCost + 1600;
+    const profit = resale - totalCost;
+
+    const dealScore = Math.max(
+      0,
+      Math.min(100, (profit / resale) * 100 - risk * 0.4)
+    );
+
+    let verdict = "❌ WALK";
+    if (profit > 3000 && risk < 50) verdict = "✅ BUY";
+    else if (profit > 1000) verdict = "⚠️ RISKY";
+
+    setResult({
+      resale: Math.round(resale),
+      totalCost,
+      profit: Math.round(profit),
+      risk,
+      dealScore: Math.round(dealScore),
+      verdict,
+    });
+  };
+
+  const saveDeal = () => {
+    if (!result) return;
+    const updated = [...savedDeals, { ...form, ...result }];
+    setSavedDeals(updated);
+    localStorage.setItem("deals", JSON.stringify(updated));
+  };
+
+  const deleteDeal = (index) => {
+    const updated = savedDeals.filter((_, i) => i !== index);
+    setSavedDeals(updated);
+    localStorage.setItem("deals", JSON.stringify(updated));
+  };
+
+  return (
+    <main style={{ padding: 30, maxWidth: 700, margin: "auto", fontFamily: "sans-serif" }}>
+      <h1>🚗 Deal Intelligence Engine</h1>
+
+      {/* INPUT */}
+      <div style={{ display: "grid", gap: 10 }}>
+        <input name="url" placeholder="Paste listing text or URL" onChange={handleChange} />
+        <button onClick={parseURL}>Auto-Fill</button>
+
+        <input name="price" placeholder="Purchase Price" onChange={handleChange} />
+
+        <h3>Market Comparisons (IMPORTANT)</h3>
+        <input name="comp1" placeholder="Comp 1 price" onChange={handleChange} />
+        <input name="comp2" placeholder="Comp 2 price" onChange={handleChange} />
+        <input name="comp3" placeholder="Comp 3 price" onChange={handleChange} />
+
+        <input name="damage" placeholder="Damage (engine, frame, etc)" onChange={handleChange} />
+
+        <button onClick={analyzeDeal} style={{ padding: 12 }}>
+          Analyze Deal
+        </button>
+      </div>
+
+      {/* RESULT */}
+      {result && (
+        <div style={{ marginTop: 30 }}>
+          <h2>📊 Results</h2>
+          <p>Resale Avg: ${result.resale}</p>
+          <p>Total Cost: ${result.totalCost}</p>
+          <h2>💰 Profit: ${result.profit}</h2>
+          <p>⚠️ Risk: {result.risk}</p>
+          <p>🔥 Score: {result.dealScore}</p>
+          <h2>{result.verdict}</h2>
+          <button onClick={saveDeal}>Save Deal</button>
+        </div>
+      )}
+
+      {/* SAVED */}
+      {savedDeals.length > 0 && (
+        <div style={{ marginTop: 40 }}>
+          <h2>📁 Saved Deals</h2>
+          {savedDeals.map((d, i) => (
+            <div key={i} style={{ border: "1px solid #ccc", padding: 10, marginBottom: 10 }}>
+              <p>{d.make} {d.model}</p>
+              <p>Profit: ${d.profit}</p>
+              <p>Score: {d.dealScore}</p>
+              <button onClick={() => deleteDeal(i)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TOP DEALS */}
+      <div style={{ marginTop: 40 }}>
+        <h2>🔥 Top Deals (Simulated)</h2>
+        {topDeals.map((d, i) => (
+          <p key={i}>{d.name} — Score: {d.score}</p>
+        ))}
+      </div>
+    </main>
+  );
+}
